@@ -1,0 +1,36 @@
+{
+  "name": "mongo-manager-backend",
+  "version": "1.0.0",
+  "description": "Mongo Manager - MongoDB Management UI Backend",
+  "author": {
+    "name": "Gokhan Ozgezer",
+    "email": "gokhanozgezer@gmail.com"
+  },
+  "license": "MIT",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "mongodb": "^7.0.0",
+    "multer": "^2.0.2",
+    "tar": "^7.4.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "eslint": "^9.39.2",
+    "globals": "^16.5.0",
+    "prettier": "^3.7.4"
+  }
+}
