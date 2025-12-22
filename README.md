@@ -2,6 +2,12 @@
 
 A modern, web-based MongoDB management tool built with Vue 3 and Node.js. A lightweight alternative to MongoDB Compass that runs entirely in your browser.
 
+<img width="416" height="295" alt="Mongo-Manager" src="https://github.com/user-attachments/assets/7cdc3fea-09bd-499c-a4d8-6638bc9e835f" />
+
+<img width="416" height="295" alt="Mongo-Manager_1" src="https://github.com/user-attachments/assets/3708d37d-a383-477f-a800-a4e04bb96c52" />
+
+<img width="593" height="288" alt="Mongo-Manager_2" src="https://github.com/user-attachments/assets/c3e52462-41a3-4769-a6e0-47d9566d20ac" />
+
 ## Features
 
 ### Connection Management
