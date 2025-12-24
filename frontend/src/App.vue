@@ -93,14 +93,18 @@
 									v-if="sidebarSearchQuery"
 									class="sidebar-search-clear"
 									@click="sidebarSearchQuery = ''"
-								>×</button>
+								>
+									×
+								</button>
 							</div>
 							<button
 								class="sidebar-filter-btn"
 								:class="{ active: showOnlyActiveConnection }"
 								@click="sidebarFilterDropdownOpen = !sidebarFilterDropdownOpen"
 								:title="$t('filterOptions')"
-							>⚙</button>
+							>
+								⚙
+							</button>
 							<div v-if="sidebarFilterDropdownOpen" class="sidebar-filter-dropdown" @click.stop>
 								<div class="filter-dropdown-title">{{ $t('filterOptions') }}</div>
 								<label class="filter-checkbox">
@@ -223,7 +227,7 @@
 			</div>
 
 			<!-- Connection Modal -->
-			<div v-if="showConnectionModal" class="modal-overlay" >
+			<div v-if="showConnectionModal" class="modal-overlay">
 				<div class="modal mongomanager-modal">
 					<div class="modal-title">{{ $t('newConnection') }}</div>
 					<div class="modal-body">
@@ -288,7 +292,7 @@
 			</div>
 
 			<!-- Edit Connection Modal -->
-			<div v-if="showEditConnectionModal" class="modal-overlay" >
+			<div v-if="showEditConnectionModal" class="modal-overlay">
 				<div class="modal mongomanager-modal">
 					<div class="modal-title">{{ $t('editConnection') }}</div>
 					<form @submit.prevent="updateConnection">
@@ -338,7 +342,7 @@
 			</div>
 
 			<!-- Create Database Modal -->
-			<div v-if="showCreateDbModal" class="modal-overlay" >
+			<div v-if="showCreateDbModal" class="modal-overlay">
 				<div class="modal mongomanager-modal" style="width: 450px">
 					<div class="modal-title">{{ $t('createDatabase') }}</div>
 
@@ -520,18 +524,11 @@ const sortedDatabases = computed(() => {
 	return [...databases.value].sort((a, b) => a.name.localeCompare(b.name))
 })
 
-const sortedCollections = computed(() => {
-	return [...collections.value].sort((a, b) => a.name.localeCompare(b.name))
-})
-
 // Filter favorites for current connection only
 const currentConnectionFavorites = computed(() => {
 	if (!activeConnectionId.value) return []
 	return favorites.value.filter(f => f.connectionId === activeConnectionId.value)
 })
-
-// Check if there are multiple connections
-const hasMultipleConnections = computed(() => connections.value.length > 1)
 
 // Check if active connection has matching databases or collections
 function activeConnectionHasSearchMatch() {
@@ -626,11 +623,6 @@ function getFilteredCollections(dbName) {
 
 	// Otherwise filter collections
 	return sorted.filter(coll => coll.name.toLowerCase().includes(query))
-}
-
-function clearSidebarFilters() {
-	sidebarSearchQuery.value = ''
-	showOnlyActiveConnection.value = false
 }
 
 function getSortedCollections(dbName) {

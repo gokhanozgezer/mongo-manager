@@ -111,7 +111,7 @@ export async function runAggregation(req, res, next) {
 		const totalCount = countResult.length > 0 ? countResult[0].total : 0
 
 		// Results pipeline (add pagination if not present)
-		let resultsPipeline = [...convertedPipeline]
+		const resultsPipeline = [...convertedPipeline]
 
 		if (!hasSkip && !hasLimit) {
 			const skip = (parseInt(page) - 1) * parseInt(pageSize)
