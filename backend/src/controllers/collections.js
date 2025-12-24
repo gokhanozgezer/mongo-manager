@@ -30,10 +30,10 @@ export async function listCollections(req, res, next) {
 						size = stats.size || 0
 						avgObjSize = stats.avgObjSize || 0
 						nindexes = stats.nindexes || 0
-					} catch (e) {
+					} catch {
 						// Ignore stats error
 					}
-				} catch (e) {
+				} catch {
 					// Ignore count error for special collections
 				}
 

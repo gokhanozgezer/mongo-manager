@@ -37,12 +37,12 @@ function cleanupOldBackups() {
 					}
 					console.log(`Cleaned up old backup: ${file}`)
 				}
-			} catch (e) {
+			} catch {
 				// Ignore errors for individual files
 			}
 		}
-	} catch (e) {
-		console.error('Backup cleanup error:', e.message)
+	} catch (err) {
+		console.error('Backup cleanup error:', err.message)
 	}
 }
 
@@ -186,8 +186,9 @@ async function exportWithMongodump(req, res, next, connection, dbName) {
 
 /**
  * Export database as JSON (fallback when mongodump not available)
+ * @private - Used internally, exported for potential future use
  */
-async function exportDatabaseAsJson(req, res, next, connectionId, dbName) {
+export async function exportDatabaseAsJson(_req, res, _next, connectionId, dbName) {
 	const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
 	const filename = `${dbName}-${timestamp}.json`
 
@@ -351,7 +352,7 @@ export async function exportCollectionJson(req, res, next) {
 		let filterObj = {}
 		try {
 			filterObj = JSON.parse(filter)
-		} catch (e) {}
+		} catch {}
 
 		const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
 		const filename = `${dbName}-${collectionName}-${timestamp}.json`
@@ -428,7 +429,7 @@ export async function restoreDatabase(req, res, next) {
 					await restoreFromJson(connectionId, dbName, uploadedFile)
 					res.json({message: `Database ${dbName} restored successfully from JSON`})
 					return
-				} catch (jsonErr) {
+				} catch {
 					throw new Error('mongorestore not available and file is not valid JSON. Please install MongoDB Database Tools or use JSON export format.')
 				}
 			}
@@ -578,9 +579,6 @@ export async function restoreCollection(req, res, next) {
 				throw new Error(`Invalid backup file: collection ${collectionName} not found`)
 			}
 
-			// Get the directory containing the bson file
-			const bsonDir = path.dirname(bsonFile)
-
 			// Build mongorestore command for specific collection
 			const args = ['--uri', getConnectionUri(connection), '--db', dbName, '--collection', collectionName, '--drop', bsonFile]
 
@@ -638,7 +636,7 @@ export async function importCollectionJson(req, res, next) {
 
 		try {
 			documents = JSON.parse(fileContent)
-		} catch (e) {
+		} catch {
 			// Try parsing as JSONL (one JSON per line)
 			documents = fileContent
 				.split('\n')

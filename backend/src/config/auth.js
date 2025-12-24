@@ -112,7 +112,7 @@ export function changeUsername(userId, newUsername) {
 	saveUsers(users)
 
 	// Update active sessions
-	for (const [token, session] of activeSessions.entries()) {
+	for (const session of activeSessions.values()) {
 		if (session.userId === userId) {
 			session.username = newUsername
 		}
