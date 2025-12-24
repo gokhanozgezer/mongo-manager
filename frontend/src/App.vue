@@ -79,8 +79,39 @@
 						<button @click="mobileMenuOpen = false">✕</button>
 					</div>
 					<div class="panel-content">
+						<!-- Global Search -->
+						<div class="sidebar-search">
+							<div class="sidebar-search-wrapper">
+								<span class="sidebar-search-icon">🔍</span>
+								<input
+									v-model="sidebarSearchQuery"
+									type="text"
+									:placeholder="$t('searchAll')"
+									class="sidebar-search-input"
+								/>
+								<button
+									v-if="sidebarSearchQuery"
+									class="sidebar-search-clear"
+									@click="sidebarSearchQuery = ''"
+								>×</button>
+							</div>
+							<button
+								class="sidebar-filter-btn"
+								:class="{ active: showOnlyActiveConnection }"
+								@click="sidebarFilterDropdownOpen = !sidebarFilterDropdownOpen"
+								:title="$t('filterOptions')"
+							>⚙</button>
+							<div v-if="sidebarFilterDropdownOpen" class="sidebar-filter-dropdown" @click.stop>
+								<div class="filter-dropdown-title">{{ $t('filterOptions') }}</div>
+								<label class="filter-checkbox">
+									<input type="checkbox" v-model="showOnlyActiveConnection" />
+									{{ $t('showOnlyActiveConnections') }}
+								</label>
+							</div>
+						</div>
+
 						<!-- Favorites / Quick Access - Only show when connected -->
-						<div class="section" v-if="activeConnection && currentConnectionFavorites.length > 0">
+						<div class="section" v-if="activeConnection && currentConnectionFavorites.length > 0 && !sidebarSearchQuery">
 							<div class="section-title favorites-title">
 								<span class="fav-icon">★</span> {{ $t('favorites') }}
 								<a href="#" @click.prevent="clearCurrentConnectionFavorites" :title="$t('clearAll')">[x]</a>
@@ -99,14 +130,15 @@
 						</div>
 
 						<!-- Connection Selector -->
-						<div class="section">
+						<div class="section" v-if="!sidebarSearchQuery || filteredConnections.length > 0">
 							<div class="section-title">
 								{{ $t('connections') }}
 								<a href="#" class="add-btn" @click.prevent="showConnectionModal = true">{{ $t('add') }}</a>
 							</div>
+
 							<div v-if="connections.length === 0" class="empty-text">{{ $t('noConnections') }}</div>
 							<ul v-else class="tree-list">
-								<li v-for="conn in connections" :key="conn.id" class="connection-item">
+								<li v-for="conn in filteredConnections" :key="conn.id" class="connection-item">
 									<span class="conn-status" :class="{connected: activeConnectionId === conn.id}">●</span>
 									<a href="#" :class="{active: activeConnectionId === conn.id}" @click.prevent="selectConnection(conn)">
 										{{ conn.name }}
@@ -130,31 +162,32 @@
 						</div>
 
 						<!-- Databases -->
-						<div class="section" v-if="activeConnection">
+						<div class="section" v-if="activeConnection && (!sidebarSearchQuery || filteredDatabases.length > 0)">
 							<div class="section-title">
 								<span>{{ $t('databases') }}</span>
 								<div>
 								    <a href="#" @click.prevent="showCreateDbModal = true" :title="$t('createDatabase')">[+]</a>
-                                    <a href="#" @click.prevent="refreshDatabases" :title="$t('refresh')" class="refresh-btn">↻</a>
+                                    <a v-if="!sidebarSearchQuery" href="#" @click.prevent="refreshDatabases" :title="$t('refresh')" class="refresh-btn">↻</a>
                                 </div>
 							</div>
 							<div v-if="loadingDatabases" class="empty-text">{{ $t('loading') }}</div>
 							<div v-else-if="databases.length === 0" class="empty-text">{{ $t('noDatabases') }}</div>
 							<ul v-else class="tree-list">
-								<li v-for="db in sortedDatabases" :key="db.name" class="db-item">
+								<li v-for="db in filteredDatabases" :key="db.name" class="db-item">
+									<span v-if="dbLoadingStates[db.name]" class="db-loading-spinner">⟳</span>
 									<a href="#" :class="{active: selectedDatabase === db.name}" @click.prevent="goToDatabase(db)">
 										{{ db.name }}
 										<span class="count">({{ db.collectionCount || 0 }})</span>
 									</a>
 									<a href="#" class="expand-link" @click.prevent="toggleDatabaseExpand(db)" :title="$t('showCollections')"
-										>[{{ expandedDbs[db.name] ? '-' : '+' }}]</a
+										>[{{ expandedDbs[db.name] || shouldExpandForSearch(db.name) ? '-' : '+' }}]</a
 									>
 
 									<!-- Collections under this database -->
-									<ul v-if="expandedDbs[db.name]" class="tree-list nested">
+									<ul v-if="expandedDbs[db.name] || shouldExpandForSearch(db.name)" class="tree-list nested">
 										<li v-if="loadingCollections && selectedDatabase === db.name" class="empty-text">{{ $t('loading') }}</li>
-										<li v-else-if="dbCollections[db.name]?.length === 0" class="empty-text">{{ $t('noCollections') }}</li>
-										<li v-else v-for="coll in getSortedCollections(db.name)" :key="coll.name" class="coll-item">
+										<li v-else-if="getFilteredCollections(db.name).length === 0 && !sidebarSearchQuery" class="empty-text">{{ $t('noCollections') }}</li>
+										<li v-else v-for="coll in getFilteredCollections(db.name)" :key="coll.name" class="coll-item">
 											<a
 												href="#"
 												:class="{active: selectedDatabase === db.name && selectedCollection === coll.name}"
@@ -416,6 +449,7 @@ const currentLocale = computed(() => locale.value)
 const leftPanelWidth = ref(250)
 const expandedDbs = ref({})
 const dbCollections = ref({}) // Store collections per database
+const dbLoadingStates = ref({}) // Track loading state per database
 const connectionCache = ref({}) // Cache databases per connection { connectionId: databases[] }
 const mobileMenuOpen = ref(false)
 const isMobile = ref(window.innerWidth < 768)
@@ -439,6 +473,11 @@ const favorites = ref(JSON.parse(localStorage.getItem('favorites') || '[]'))
 
 // Connection dropdown state
 const openConnDropdown = ref(null)
+
+// Sidebar search and filter state
+const sidebarSearchQuery = ref('')
+const showOnlyActiveConnection = ref(false)
+const sidebarFilterDropdownOpen = ref(false)
 
 const connectionSaving = ref(false)
 const connectionTestStatus = ref(null) // { type: 'success'|'error'|'loading', message: string }
@@ -494,6 +533,106 @@ const currentConnectionFavorites = computed(() => {
 // Check if there are multiple connections
 const hasMultipleConnections = computed(() => connections.value.length > 1)
 
+// Check if active connection has matching databases or collections
+function activeConnectionHasSearchMatch() {
+	if (!sidebarSearchQuery.value.trim() || !activeConnectionId.value) return false
+	const query = sidebarSearchQuery.value.toLowerCase().trim()
+
+	// Check databases
+	for (const db of databases.value) {
+		if (db.name.toLowerCase().includes(query)) return true
+		// Check collections in this database
+		const colls = dbCollections.value[db.name] || []
+		if (colls.some(coll => coll.name.toLowerCase().includes(query))) return true
+	}
+	return false
+}
+
+// Filtered connections based on search and filter
+const filteredConnections = computed(() => {
+	let result = connections.value
+
+	// Filter by active connection only
+	if (showOnlyActiveConnection.value && activeConnectionId.value) {
+		result = result.filter(conn => conn.id === activeConnectionId.value)
+	}
+
+	// Filter by search query
+	if (sidebarSearchQuery.value.trim()) {
+		const query = sidebarSearchQuery.value.toLowerCase().trim()
+		result = result.filter(conn => {
+			// Check connection name/host/port
+			const name = (conn.name || '').toLowerCase()
+			const host = (conn.host || '').toLowerCase()
+			const port = String(conn.port || '')
+			if (name.includes(query) || host.includes(query) || port.includes(query)) {
+				return true
+			}
+			// If this is the active connection, also check if it has matching DBs/collections
+			if (conn.id === activeConnectionId.value) {
+				return activeConnectionHasSearchMatch()
+			}
+			return false
+		})
+	}
+
+	return result
+})
+
+// Filtered databases based on search - includes databases that match or have matching collections
+const filteredDatabases = computed(() => {
+	if (!sidebarSearchQuery.value.trim()) {
+		return sortedDatabases.value
+	}
+
+	const query = sidebarSearchQuery.value.toLowerCase().trim()
+	return sortedDatabases.value.filter(db => {
+		// Check if database name matches
+		if (db.name.toLowerCase().includes(query)) {
+			return true
+		}
+		// Check if any collection in this database matches
+		const colls = dbCollections.value[db.name] || []
+		return colls.some(coll => coll.name.toLowerCase().includes(query))
+	})
+})
+
+// Check if database should be auto-expanded for search
+// ONLY expands if a collection inside the DB matches (NOT if DB name matches)
+function shouldExpandForSearch(dbName) {
+	if (!sidebarSearchQuery.value.trim()) return false
+	const query = sidebarSearchQuery.value.toLowerCase().trim()
+
+	// Only auto-expand if any collection matches - NOT for DB name match
+	const colls = dbCollections.value[dbName] || []
+	return colls.some(coll => coll.name.toLowerCase().includes(query))
+}
+
+// Get filtered collections for a database
+function getFilteredCollections(dbName) {
+	const colls = dbCollections.value[dbName] || []
+	const sorted = [...colls].sort((a, b) => a.name.localeCompare(b.name))
+
+	if (!sidebarSearchQuery.value.trim()) {
+		return sorted
+	}
+
+	const query = sidebarSearchQuery.value.toLowerCase().trim()
+
+	// If database name matches, show all collections
+	if (dbName.toLowerCase().includes(query)) {
+		return sorted
+	}
+
+	// Otherwise filter collections
+	return sorted.filter(coll => coll.name.toLowerCase().includes(query))
+}
+
+function clearSidebarFilters() {
+	sidebarSearchQuery.value = ''
+	showOnlyActiveConnection.value = false
+}
+
 function getSortedCollections(dbName) {
 	const colls = dbCollections.value[dbName] || []
 	return [...colls].sort((a, b) => a.name.localeCompare(b.name))
@@ -537,6 +676,9 @@ function handleClickOutside(e) {
 	}
 	if (langDropdownOpen.value && !e.target.closest('.lang-dropdown')) {
 		langDropdownOpen.value = false
+	}
+	if (sidebarFilterDropdownOpen.value && !e.target.closest('.sidebar-filter-btn') && !e.target.closest('.sidebar-filter-dropdown')) {
+		sidebarFilterDropdownOpen.value = false
 	}
 }
 
@@ -640,6 +782,9 @@ async function selectConnection(conn) {
 		store.collectionStats = null
 
 		router.push('/')
+
+		// Load collections for all databases (so search/filter can work)
+		loadAllCollections(data.databases || [])
 	} catch (error) {
 		// Connection failed - keep current connection, just show error
 		dialog.error(error.message || 'Failed to connect to database', 'Connection Error')
@@ -751,12 +896,16 @@ async function toggleDatabaseExpand(db) {
 		expandedDbs.value = newState
 	} else {
 		expandedDbs.value = {...expandedDbs.value, [db.name]: true}
-		// Load collections for this database
-		await loadCollectionsForDb(db.name)
+		// Only load collections if not already cached
+		if (!dbCollections.value[db.name]) {
+			await loadCollectionsForDb(db.name)
+		}
 	}
 }
 
 async function loadCollectionsForDb(dbName) {
+	// Set loading state for this database
+	dbLoadingStates.value = {...dbLoadingStates.value, [dbName]: true}
 	try {
 		const response = await fetch(`/api/connections/${activeConnectionId.value}/databases/${dbName}/collections`, {
 			headers: {
@@ -769,7 +918,19 @@ async function loadCollectionsForDb(dbName) {
 	} catch (e) {
 		console.error('Failed to load collections for', dbName, e)
 		dbCollections.value[dbName] = []
+	} finally {
+		// Clear loading state for this database
+		dbLoadingStates.value = {...dbLoadingStates.value, [dbName]: false}
 	}
+}
+
+// Load collections for all databases (for search/filter to work properly)
+async function loadAllCollections(dbs) {
+	if (!dbs || dbs.length === 0) return
+
+	// Load collections for all databases in parallel
+	const promises = dbs.map(db => loadCollectionsForDb(db.name))
+	await Promise.all(promises)
 }
 
 function goToCollection(dbName, coll) {
@@ -1736,6 +1897,133 @@ a:hover {
 	transform: rotate(180deg);
 }
 
+/* Sidebar Search and Filter */
+.sidebar-search {
+	display: flex;
+	gap: 5px;
+	margin-bottom: 10px;
+	padding: 5px;
+	background: #f0f0f0;
+	border-bottom: 1px solid #ddd;
+	position: relative;
+}
+
+.sidebar-search-wrapper {
+	flex: 1;
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.sidebar-search-icon {
+	position: absolute;
+	left: 6px;
+	font-size: 11px;
+	pointer-events: none;
+}
+
+.sidebar-search-input {
+	width: 100%;
+	padding: 5px 24px 5px 24px;
+	border: 1px solid #ccc;
+	border-radius: 3px;
+	font-size: 12px;
+	background: #fff;
+}
+
+.sidebar-search-input:focus {
+	outline: none;
+	border-color: #004499;
+}
+
+.sidebar-search-input::placeholder {
+	font-size: 11px;
+	color: #999;
+}
+
+.sidebar-search-clear {
+	position: absolute;
+	right: 2px;
+	top: 50%;
+	transform: translateY(-50%);
+	background: none;
+	border: none;
+	font-size: 16px;
+	color: #999;
+	cursor: pointer;
+	padding: 0 4px;
+	line-height: 1;
+}
+
+.sidebar-search-clear:hover {
+	color: #333;
+}
+
+.sidebar-filter-btn {
+	padding: 5px 8px;
+	border: 1px solid #ccc;
+	border-radius: 3px;
+	background: #fff;
+	cursor: pointer;
+	font-size: 12px;
+}
+
+.sidebar-filter-btn:hover {
+	background: #e5e5e5;
+}
+
+.sidebar-filter-btn.active {
+	background: #004499;
+	color: #fff;
+	border-color: #004499;
+}
+
+.sidebar-filter-dropdown {
+	position: absolute;
+	top: 100%;
+	right: 5px;
+	margin-top: 4px;
+	background: #fff;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+	z-index: 100;
+	min-width: 220px;
+}
+
+.filter-dropdown-title {
+	padding: 8px 10px;
+	font-size: 11px;
+	font-weight: bold;
+	color: #666;
+	background: #f5f5f5;
+	border-bottom: 1px solid #eee;
+	text-transform: uppercase;
+}
+
+.filter-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 10px;
+	cursor: pointer;
+	font-size: 12px;
+}
+
+.filter-checkbox:hover {
+	background: #f5f5f5;
+}
+
+.filter-checkbox input[type="checkbox"] {
+	margin: 0;
+}
+
+.clear-filter-link {
+	display: block;
+	margin-top: 5px;
+	font-size: 11px;
+}
+
 /* Tree List */
 .tree-list {
 	list-style: none;
@@ -1993,6 +2281,19 @@ a:hover {
 	width: 100%;
 }
 
+.db-loading-spinner {
+	display: inline-block;
+	animation: spin 1s linear infinite;
+	margin-right: 4px;
+	font-size: 11px;
+	color: #666;
+}
+
+@keyframes spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+
 .empty-text {
 	color: #999;
 	font-style: italic;
@@ -2066,6 +2367,7 @@ a:hover {
 
 .form-table td {
 	padding: 5px;
+    white-space: nowrap;
 }
 
 .form-table input {
@@ -2777,6 +3079,73 @@ a:hover {
 	color: #4ec9b0;
 }
 
+.dark .db-loading-spinner {
+	color: #888;
+}
+
+/* Dark Mode - Sidebar Search and Filter */
+.dark .sidebar-search {
+	background: #252526;
+	border-color: #3c3c3c;
+}
+
+.dark .sidebar-search-input {
+	background: #2d2d2d;
+	border-color: #3c3c3c;
+	color: #d4d4d4;
+}
+
+.dark .sidebar-search-input:focus {
+	border-color: #0e639c;
+}
+
+.dark .sidebar-search-input::placeholder {
+	color: #808080;
+}
+
+.dark .sidebar-search-clear {
+	color: #808080;
+}
+
+.dark .sidebar-search-clear:hover {
+	color: #d4d4d4;
+}
+
+.dark .sidebar-filter-btn {
+	background: #2d2d2d;
+	border-color: #3c3c3c;
+	color: #d4d4d4;
+}
+
+.dark .sidebar-filter-btn:hover {
+	background: #3c3c3c;
+}
+
+.dark .sidebar-filter-btn.active {
+	background: #0e639c;
+	border-color: #0e639c;
+	color: #fff;
+}
+
+.dark .sidebar-filter-dropdown {
+	background: #252526;
+	border-color: #3c3c3c;
+}
+
+.dark .filter-dropdown-title {
+	background: #2d2d2d;
+	border-color: #3c3c3c;
+	color: #808080;
+}
+
+.dark .filter-checkbox {
+	color: #d4d4d4;
+}
+
+.dark .filter-checkbox:hover {
+	background: #2d2d2d;
+}
+
 /* Dark Mode - Connection Dropdown */
 .dark .conn-dropdown-btn {
 	color: #858585;
@@ -2785,6 +3154,10 @@ a:hover {
 .dark .conn-dropdown-btn:hover {
 	background: #3c3c3c;
 	color: #cfcfcf;
+}
+
+.dark .expand-link:hover {
+	color: white !important;
 }
 
 .dark .conn-dropdown-menu {
@@ -3416,6 +3789,10 @@ a:hover {
 	color: var(--modern-success);
 }
 
+.modern-theme .db-loading-spinner {
+	color: var(--modern-text-sidebar-muted);
+}
+
 /* Modern Theme - Connection Dropdown */
 .modern-theme .conn-dropdown-btn {
 	color: var(--modern-text-sidebar-muted);
@@ -3424,7 +3801,6 @@ a:hover {
 
 .modern-theme .conn-dropdown-btn:hover {
 	background: rgba(255, 255, 255, 0.1);
-	color: white;
 }
 
 .modern-theme .conn-dropdown-menu {
@@ -3469,10 +3845,6 @@ a:hover {
 .modern-theme .expand-link {
 	color: var(--modern-text-sidebar-muted) !important;
 	font-size: var(--modern-font-size-sm);
-}
-
-.modern-theme .expand-link:hover {
-	color: white !important;
 }
 
 .modern-theme .action-link.delete {
@@ -3615,7 +3987,7 @@ a:hover {
 
 .modern-theme .modal-buttons button:hover {
 	background: var(--modern-gray-100);
-	color: var(--modern-text-primary);
+	color: #fff;
 }
 
 .modern-theme .modal-buttons button[type='submit'] {
@@ -3970,6 +4342,10 @@ a:hover {
 
 .modern-theme.sidebar-light .left-panel::-webkit-scrollbar-thumb:hover {
 	background: rgba(0, 0, 0, 0.25);
+}
+
+.modern-theme .sidebar-search {
+    border-radius: var(--modern-radius);
 }
 
 /* Dark mode + sidebar-light = dark sidebar (ignore sidebar-light in dark mode) */
