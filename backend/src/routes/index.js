@@ -2,6 +2,7 @@ import {Router} from 'express'
 import multer from 'multer'
 import path from 'path'
 import os from 'os'
+import rateLimit from 'express-rate-limit'
 
 // Import controllers
 import * as auth from '../controllers/auth.js'
@@ -22,13 +23,25 @@ const upload = multer({
 	limits: {fileSize: 500 * 1024 * 1024} // 500MB limit
 })
 
+// Strict rate limiter for auth endpoints (brute-force protection)
+const authLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000, // 15 minutes
+	max: 10, // Limit each IP to 10 login attempts per windowMs
+	message: {
+		error: 'Too many login attempts from this IP, please try again later.',
+		retryAfter: '15 minutes'
+	},
+	standardHeaders: true,
+	legacyHeaders: false
+})
+
 const router = Router()
 
 // =============================================================================
-// Auth Routes (Public)
+// Auth Routes (Public) - with rate limiting for login
 // =============================================================================
 
-router.post('/auth/login', auth.login)
+router.post('/auth/login', authLimiter, auth.login)
 router.post('/auth/logout', auth.logoutHandler)
 router.get('/auth/me', auth.me)
 

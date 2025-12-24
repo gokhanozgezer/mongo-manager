@@ -264,6 +264,52 @@ mongo-manager-main/
 - CodeMirror 6
 - Vite
 
+## Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+### Development Workflow
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Make your changes
+4. Run tests: `npm test` (in both `backend/` and `frontend/`)
+5. Run linter: `npm run lint`
+6. Commit your changes
+7. Push to your fork
+8. Open a Pull Request
+
+### CI/CD Pipeline
+
+This project uses GitHub Actions for continuous integration. All pull requests must pass:
+
+- **Backend Tests**: Linting and unit tests
+- **Frontend Tests**: Linting, unit tests, and build verification
+- **Docker Build**: Ensures the Docker image builds successfully
+
+### Branch Protection
+
+The `main` branch is protected. Pull requests require:
+- All CI checks to pass
+- At least one approval (for external contributors)
+
+### Running Tests Locally
+
+```bash
+# Backend
+cd backend
+npm install
+npm run lint
+npm test
+
+# Frontend
+cd frontend
+npm install
+npm run lint
+npm test
+npm run build
+```
+
 ## Author
 
 **Gokhan Ozgezer**
