@@ -1,5 +1,5 @@
 <template>
-	<div class="modal-overlay" >
+	<div class="modal-overlay" @keydown.esc="$emit('close')" tabindex="0" ref="modalOverlay">
 		<div class="settings-modal">
 			<div class="modal-header">
 				<h3>{{ $t('settings') }}</h3>
@@ -312,7 +312,7 @@
 </template>
 
 <script setup>
-import {ref, computed, onMounted} from 'vue'
+import {ref, computed, onMounted, nextTick} from 'vue'
 import {useAppStore} from '../stores/app.js'
 import {useI18n} from 'vue-i18n'
 import {api} from '../api/index.js'
@@ -323,6 +323,8 @@ const {locale} = useI18n()
 const dialog = useDialog()
 
 const emit = defineEmits(['close'])
+
+const modalOverlay = ref(null)
 
 // Tab state
 const activeTab = ref('appearance')
@@ -362,6 +364,9 @@ const previewStyle = computed(() => {
 
 // Load access settings on mount
 onMounted(async () => {
+	nextTick(() => {
+		modalOverlay.value?.focus()
+	})
 	try {
 		const {data} = await api.get('/settings/access')
 		currentIp.value = data.currentIp || ''

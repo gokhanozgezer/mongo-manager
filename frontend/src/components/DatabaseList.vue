@@ -70,7 +70,7 @@
 		</ul>
 
 		<!-- Create Database Modal -->
-		<div v-if="showCreateModal" class="modal-overlay" >
+		<div v-if="showCreateModal" class="modal-overlay" @keydown.esc="closeModal" tabindex="0" ref="createModal">
 			<div class="modal-content">
 				<div class="modal-header">
 					<h3>{{ t('createDatabase') }}</h3>
@@ -138,7 +138,7 @@
 </template>
 
 <script setup>
-import {ref, computed} from 'vue'
+import {ref, computed, watch, nextTick} from 'vue'
 import {useAppStore} from '../stores/app.js'
 import {useDialog} from '../composables/useDialog.js'
 import {useI18n} from 'vue-i18n'
@@ -150,6 +150,16 @@ const store = useAppStore()
 const confirmDialog = ref(null)
 
 const showCreateModal = ref(false)
+const createModal = ref(null)
+
+watch(showCreateModal, newVal => {
+	if (newVal) {
+		nextTick(() => {
+			createModal.value?.focus()
+		})
+	}
+})
+
 const newDbName = ref('')
 const initialCollection = ref('')
 const creating = ref(false)

@@ -9,7 +9,11 @@
 						<span class="edit-icon">✎</span> {{ t('edit') }}
 					</button>
 					<span class="toolbar-divider"></span>
-					<span class="results-info">{{ t('allResults') }} ({{ finalResultCount }} {{ t('docs') }})</span>
+					<span class="results-info">
+						{{ t('allResults') }}
+						<span v-if="countingResults" class="counting-indicator">({{ t('counting') }}...)</span>
+						<span v-else>({{ finalResultCount }} {{ t('docs') }})</span>
+					</span>
 				</template>
 
 				<!-- Editor Mode: Normal Toolbar -->
@@ -109,13 +113,22 @@
 
 		<!-- ========== STAGES MODE ========== -->
 		<template v-if="editorMode === 'stages' && !resultsMode">
+			<!-- Running Pipeline Message -->
+			<div v-if="running" class="pipeline-running-container">
+				<div class="pipeline-running-message">
+					<div class="running-spinner"></div>
+					<h3>{{ t('pipelineRunning') }}</h3>
+					<p>{{ t('pipelineRunningDesc') }}</p>
+				</div>
+			</div>
+
 			<!-- Add Stage Button (top) -->
-			<div class="add-stage-top" v-if="stages.length === 0">
+			<div class="add-stage-top" v-if="stages.length === 0 && !running">
 				<button class="btn-add-stage" @click="addStage(0)"><span class="plus-icon">+</span> {{ t('addStage') }}</button>
 			</div>
 
 			<!-- Stages List -->
-			<div class="stages-container">
+			<div class="stages-container" v-show="!running">
 				<div v-for="(stage, index) in stages" :key="stage.id" class="stage-wrapper">
 					<!-- Stage Card -->
 					<div class="stage-card" :class="{collapsed: stage.collapsed, disabled: !stage.enabled}">
@@ -173,6 +186,14 @@
 								<input type="checkbox" v-model="stage.enabled" @change="onStageToggle(index)" />
 								<span class="toggle-slider"></span>
 							</label>
+							<!-- Performance Warning Icon -->
+							<span
+								v-if="pipelineWarnings[index]"
+								class="stage-warning-icon"
+								:title="t(pipelineWarnings[index])"
+							>
+								⚠️
+							</span>
 							<div class="stage-actions">
 								<!-- Focus Mode Button -->
 								<button class="btn-icon focus-btn" @click="openFocusMode(index)" :title="t('focusMode')">
@@ -220,18 +241,34 @@
 									/>
 									<div v-if="!stage.operator" class="stage-warning">{{ t('selectOperator') }}</div>
 									<div v-if="stage.error" class="stage-error">{{ stage.error }}</div>
+									<div v-if="pipelineWarnings[index]" class="stage-perf-warning">
+										<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+											<path d="M8 1.5L1 14h14L8 1.5zm0 3l4.9 8.5H3.1L8 4.5zM7.5 7v3h1V7h-1zm0 4v1h1v-1h-1z"/>
+										</svg>
+										{{ pipelineWarnings[index] }}
+									</div>
 								</div>
 
 								<!-- Stage Preview -->
-								<div class="stage-preview" v-if="autoPreview && stage.enabled">
+								<div class="stage-preview" v-if="stage.enabled">
 									<div class="preview-header">
 										<span
 											>{{ t('stageOutput') }}
 											<a :href="getDocsUrl(stage.operator)" target="_blank" class="operator-link">{{ stage.operator }}</a></span
 										>
 										<span class="preview-count" v-if="stage.previewCount !== null">
-											({{ stage.previewDocs.length }} {{ t('docs') }})
+											({{ stage.previewDocs?.length || 0 }} {{ t('docs') }})
 										</span>
+										<button
+											class="btn-preview"
+											@click="runPreviewFromStage(index)"
+											:disabled="stage.previewLoading || !stage.operator"
+											:title="t('runPreview')"
+										>
+											<span v-if="stage.previewLoading" class="btn-loading-sm"></span>
+											<span v-else>▶</span>
+											{{ stage.previewLoading ? t('loading') : t('preview') }}
+										</button>
 									</div>
 									<div class="preview-content" v-if="stage.previewLoading">
 										<div class="loading-spinner">{{ t('loadingPreview') }}</div>
@@ -264,7 +301,7 @@
 			</div>
 
 			<!-- Add Stage Button (bottom) -->
-			<div class="add-stage-bottom" v-if="stages.length > 0">
+			<div class="add-stage-bottom" v-if="stages.length > 0 && !running">
 				<button class="btn-add-stage" @click="addStage(stages.length)"><span class="plus-icon">+</span> {{ t('addStage') }}</button>
 			</div>
 		</template>
@@ -297,6 +334,16 @@
 				<div class="text-mode-preview-header">
 					<span class="preview-title">{{ t('stageOutput') }}</span>
 					<span class="preview-count" v-if="textModePreviewDocs.length > 0"> ({{ textModePreviewDocs.length }} {{ t('docs') }}) </span>
+					<button
+						class="btn-preview"
+						@click="runTextModePreview"
+						:disabled="textModePreviewLoading || !!textModeError"
+						:title="t('runPreview')"
+					>
+						<span v-if="textModePreviewLoading" class="btn-loading-sm"></span>
+						<span v-else>▶</span>
+						{{ textModePreviewLoading ? t('loading') : t('preview') }}
+					</button>
 				</div>
 				<div class="text-mode-preview-content" v-if="textModePreviewLoading">
 					<div class="loading-spinner">{{ t('loadingPreview') }}</div>
@@ -309,26 +356,25 @@
 					</div>
 				</div>
 				<div class="text-mode-preview-content empty" v-else>
-					<span>{{ t('noPreviewAvailable') }}</span>
+					<div class="preview-hint">
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+							<path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 12.5a5.5 5.5 0 110-11 5.5 5.5 0 010 11zM8 4a.75.75 0 00-.75.75v3.5a.75.75 0 001.5 0v-3.5A.75.75 0 008 4zm0 6a1 1 0 100 2 1 1 0 000-2z"/>
+						</svg>
+						{{ t('clickPreviewToRun') }}
+					</div>
 				</div>
 			</div>
 		</div>
 
 		<!-- Final Results Section -->
-		<div class="results-section" :class="{'results-fullpage': resultsMode}" v-if="finalResults">
-			<div class="results-header" v-if="!resultsMode">
-				<h3>{{ t('pipelineResults') }}</h3>
-				<span class="result-count">{{ finalResultCount }} {{ t('docs') }}</span>
-				<div class="view-toggle">
-					<button :class="['btn', 'btn-sm', viewMode === 'json' ? 'btn-primary' : 'btn-secondary']" @click="viewMode = 'json'">{{ t('viewJson') }}</button>
-					<button :class="['btn', 'btn-sm', viewMode === 'table' ? 'btn-primary' : 'btn-secondary']" @click="viewMode = 'table'">{{ t('viewTable') }}</button>
-				</div>
-			</div>
+		<div class="results-section results-fullpage" v-if="resultsMode && finalResults">
 			<!-- Results Mode Header -->
-			<div class="results-header results-fullpage-header" v-if="resultsMode">
+			<div class="results-header results-fullpage-header">
 				<div class="results-pagination-info">
 					<span class="showing-info">
-						{{ t('showing') }} {{ paginationStart }} – {{ paginationEnd }} {{ t('of') }} {{ finalResultCount }}
+						{{ t('showing') }} {{ paginationStart }} – {{ paginationEnd }}
+						<span v-if="countingResults" class="counting-indicator">{{ t('of') }} ({{ t('counting') }}...)</span>
+						<span v-else>{{ t('of') }} {{ finalResultCount }}</span>
 					</span>
 					<span class="per-page-info">({{ paginationLimit }} {{ t('perPage') }})</span>
 				</div>
@@ -382,7 +428,7 @@
 		</div>
 
 		<!-- Explain Plan Modal -->
-		<div v-if="showExplainModal" class="modal-overlay" >
+		<div v-if="showExplainModal" class="modal-overlay" @keydown.esc="showExplainModal = false" tabindex="0" ref="explainModalRef">
 			<div class="explain-modal">
 				<div class="modal-header">
 					<h2>{{ t('explainPlan') }}</h2>
@@ -457,7 +503,7 @@
 		</div>
 
 		<!-- Save/Load Pipeline Modals -->
-		<div v-if="showSaveModal" class="modal-overlay" >
+		<div v-if="showSaveModal" class="modal-overlay" @keydown.esc="showSaveModal = false" tabindex="0" ref="saveModalRef">
 			<div class="modal-content">
 				<h3>{{ t('savePipeline') }}</h3>
 				<form @submit.prevent="savePipeline">
@@ -477,7 +523,7 @@
 			</div>
 		</div>
 
-		<div v-if="showLoadModal" class="modal-overlay" >
+		<div v-if="showLoadModal" class="modal-overlay" @keydown.esc="showLoadModal = false" tabindex="0" ref="loadModalRef">
 			<div class="modal-content">
 				<h3>{{ t('loadPipeline') }}</h3>
 				<div v-if="loadingPipelines" class="loading">{{ t('loading') }}</div>
@@ -498,7 +544,7 @@
 		</div>
 
 		<!-- Export to Language Modal -->
-		<div v-if="showExportModal" class="modal-overlay" >
+		<div v-if="showExportModal" class="modal-overlay" @keydown.esc="showExportModal = false" tabindex="0" ref="exportModalRef">
 			<div class="export-modal">
 				<div class="modal-header">
 					<h2>{{ t('exportPipelineToLanguage') }}</h2>
@@ -529,7 +575,7 @@
 		</div>
 
 		<!-- Focus Mode Modal -->
-		<div v-if="focusModeIndex !== null" class="modal-overlay focus-mode-overlay" >
+		<div v-if="focusModeIndex !== null" class="modal-overlay focus-mode-overlay" @keydown.esc="closeFocusMode" tabindex="0" ref="focusModeRef">
 			<div class="focus-mode-modal">
 				<div class="focus-modal-header">
 					<div class="focus-header-left">
@@ -637,6 +683,10 @@
 						<div class="focus-panel-header">
 							<span class="panel-title">{{ t('stageOutput') }}</span>
 							<span class="panel-subtitle">{{ focusOutputDocs.length }} {{ t('docs') }}</span>
+							<button class="btn btn-sm btn-primary focus-preview-btn" @click="loadFocusOutput" :disabled="focusOutputLoading">
+								<span v-if="focusOutputLoading" class="spinner-sm"></span>
+								<span v-else>{{ t('preview') }}</span>
+							</button>
 						</div>
 						<div class="focus-panel-content">
 							<div v-if="focusOutputLoading" class="loading-spinner">{{ t('loadingPreview') }}</div>
@@ -706,6 +756,34 @@ const themeColors = {
 const currentThemeColors = computed(() => {
 	const themeName = editorTheme.value.toLowerCase().replace(/\s+/g, '-')
 	return themeColors[themeName] || themeColors['default']
+})
+
+// Pipeline warnings - detect $sort before $match (causes full collection scan)
+const pipelineWarnings = computed(() => {
+	let foundSort = false
+	let foundMatch = false
+	const warnings = {}
+
+	for (let i = 0; i < stages.value.length; i++) {
+		const stage = stages.value[i]
+		if (!stage.enabled) continue
+
+		if (stage.operator === '$sort' && !foundMatch) {
+			foundSort = true
+		}
+
+		if (stage.operator === '$match' && foundSort && !foundMatch) {
+			// Find the $sort stage that came before this $match
+			for (let j = 0; j < i; j++) {
+				if (stages.value[j].enabled && stages.value[j].operator === '$sort') {
+					warnings[j] = t('sortBeforeMatch')
+					break
+				}
+			}
+			foundMatch = true
+		}
+	}
+	return warnings
 })
 
 // Stage templates
@@ -1133,8 +1211,9 @@ function formatRustBson(obj) {
 
 // State
 const stages = ref([])
-const autoPreview = ref(true)
+const autoPreview = ref(false)
 const running = ref(false)
+const countingResults = ref(false)
 const totalDocs = ref(null)
 const collectionDocs = ref([])
 const finalResults = ref(null)
@@ -1238,9 +1317,27 @@ const showExportModal = ref(false)
 const selectedExportLanguage = ref('node')
 const exportCode = ref('')
 
+// Modal refs for ESC key handling
+const explainModalRef = ref(null)
+const saveModalRef = ref(null)
+const loadModalRef = ref(null)
+const exportModalRef = ref(null)
+const focusModeRef = ref(null)
+
+// Focus modal when opened for ESC key handling
+function focusModal(modalRef) {
+	nextTick(() => {
+		modalRef.value?.focus()
+	})
+}
+watch(showExplainModal, v => v && focusModal(explainModalRef))
+watch(showSaveModal, v => v && focusModal(saveModalRef))
+watch(showLoadModal, v => v && focusModal(loadModalRef))
+watch(showExportModal, v => v && focusModal(exportModalRef))
+watch(focusModeIndex, v => v !== null && focusModal(focusModeRef))
+
 // Debounce timer
 let previewDebounceTimer = null
-let focusDebounceTimer = null
 
 // Computed - Extract document fields for autocomplete
 const documentFields = computed(() => {
@@ -1410,10 +1507,6 @@ function closeFocusMode() {
 	focusInputDocs.value = []
 	focusOutputDocs.value = []
 	focusOutputError.value = ''
-	// Update previews after closing focus mode
-	if (autoPreview.value) {
-		updateAllPreviews()
-	}
 }
 
 function focusNavigate(direction) {
@@ -1427,25 +1520,36 @@ function focusNavigate(direction) {
 async function loadFocusData() {
 	if (focusModeIndex.value === null) return
 
-	// Load input documents (from previous stage or collection)
+	// Load input documents - use previous stage's preview if available
 	try {
 		if (focusModeIndex.value === 0) {
 			// First stage - use collection documents
 			focusInputDocs.value = collectionDocs.value.slice(0, 10)
 		} else {
-			// Get output from previous stage
-			const pipeline = buildPipelineUpTo(focusModeIndex.value - 1)
-			if (pipeline) {
-				const response = await api.aggregations.run(props.connectionId, props.database, props.collection, pipeline, {page: 1, pageSize: 10})
-				focusInputDocs.value = response.results || []
+			const prevStage = stages.value[focusModeIndex.value - 1]
+			if (prevStage?.previewDocs?.length > 0) {
+				// Use cached preview from previous stage
+				focusInputDocs.value = prevStage.previewDocs
+			} else {
+				// Fetch from API if no preview available
+				const pipeline = buildPipelineUpTo(focusModeIndex.value - 1)
+				if (pipeline) {
+					const response = await api.aggregations.run(props.connectionId, props.database, props.collection, pipeline, {page: 1, pageSize: 10, skipCount: true})
+					focusInputDocs.value = response.results || []
+				}
 			}
 		}
 	} catch (err) {
 		focusInputDocs.value = []
 	}
 
-	// Load output documents
-	await loadFocusOutput()
+	// Load output documents - use current stage's preview if available
+	const currentStage = stages.value[focusModeIndex.value]
+	if (currentStage?.previewDocs?.length > 0) {
+		focusOutputDocs.value = currentStage.previewDocs
+	} else {
+		await loadFocusOutput()
+	}
 }
 
 async function loadFocusOutput() {
@@ -1468,9 +1572,12 @@ async function loadFocusOutput() {
 			return
 		}
 
-		const response = await api.aggregations.run(props.connectionId, props.database, props.collection, pipeline, {page: 1, pageSize: 10})
+		const response = await api.aggregations.run(props.connectionId, props.database, props.collection, pipeline, {page: 1, pageSize: 10, skipCount: true})
 
 		focusOutputDocs.value = response.results || []
+		// Save to stage preview as well
+		stage.previewDocs = response.results || []
+		stage.previewCount = response.results?.length || 0
 		stage.error = null
 	} catch (err) {
 		focusOutputError.value = err.message
@@ -1483,16 +1590,8 @@ async function loadFocusOutput() {
 
 function onFocusCodeChange() {
 	if (focusModeIndex.value === null) return
-
 	stages.value[focusModeIndex.value].error = null
-
-	// Debounced output update
-	if (focusDebounceTimer) {
-		clearTimeout(focusDebounceTimer)
-	}
-	focusDebounceTimer = setTimeout(() => {
-		loadFocusOutput()
-	}, 500)
+	// Keep previous preview visible - user clicks Preview button to see new output
 }
 
 function duplicateStage(index) {
@@ -1597,6 +1696,20 @@ async function updatePreviewsFrom(fromIndex) {
 	}
 }
 
+// Run preview for a stage and all stages below it
+async function runPreviewFromStage(index) {
+	// Mark this stage and all below as loading
+	for (let i = index; i < stages.value.length; i++) {
+		if (stages.value[i].enabled && stages.value[i].operator) {
+			stages.value[i].previewLoading = true
+			stages.value[i].previewError = null
+		}
+	}
+
+	// Update previews sequentially from this stage
+	await updatePreviewsFrom(index)
+}
+
 async function updateStagePreview(index) {
 	const stage = stages.value[index]
 	if (!stage.enabled || !stage.operator) {
@@ -1616,12 +1729,13 @@ async function updateStagePreview(index) {
 			return
 		}
 
-		const response = await api.aggregations.run(props.connectionId, props.database, props.collection, pipeline, {page: 1, pageSize: 10})
+		const response = await api.aggregations.run(props.connectionId, props.database, props.collection, pipeline, {page: 1, pageSize: 10, skipCount: true})
 
 		// Extract documents from results (up to 10)
 		const results = response.results || []
 		stage.previewDocs = results.slice(0, 10)
-		stage.previewCount = response.pagination?.totalCount || results.length || 0
+		// If skipCount, totalCount will be null - show "10+" if we got full page
+		stage.previewCount = response.pagination?.totalCount ?? (results.length >= 10 ? '10+' : results.length)
 		stage.error = null
 	} catch (err) {
 		stage.previewError = err.message
@@ -1683,21 +1797,44 @@ async function runFullPipeline() {
 	}
 
 	running.value = true
+	countingResults.value = false
 
 	try {
+		// Step 1: Fast results with skipCount
 		const response = await api.aggregations.run(props.connectionId, props.database, props.collection, pipeline, {
 			page: pagination.value.page,
-			pageSize: pagination.value.pageSize
+			pageSize: pagination.value.pageSize,
+			skipCount: true
 		})
 
 		finalResults.value = response.results
-		finalResultCount.value = response.pagination?.totalCount || response.results?.length || 0
-		pagination.value = response.pagination || pagination.value
-		resultsMode.value = true // Enter results mode after successful run
+		finalResultCount.value = response.results?.length || 0
+		pagination.value = {...response.pagination, totalCount: null, totalPages: null}
+		resultsMode.value = true
+		running.value = false
+
+		// Step 2: Background count
+		countingResults.value = true
+		try {
+			const countResponse = await api.aggregations.run(props.connectionId, props.database, props.collection, pipeline, {
+				page: 1,
+				pageSize: 1,
+				skipCount: false
+			})
+			finalResultCount.value = countResponse.pagination?.totalCount || finalResults.value?.length || 0
+			pagination.value = {
+				...pagination.value,
+				totalCount: countResponse.pagination?.totalCount,
+				totalPages: countResponse.pagination?.totalPages
+			}
+		} catch (countErr) {
+			console.warn('Count query failed:', countErr.message)
+		} finally {
+			countingResults.value = false
+		}
 	} catch (err) {
 		dialog.error(t('pipelineError') + ': ' + err.message)
 		finalResults.value = null
-	} finally {
 		running.value = false
 	}
 }
@@ -1723,9 +1860,31 @@ async function runExplain() {
 	}
 }
 
+// Fetch only results for current page (no count query)
+async function fetchPageResults() {
+	const pipeline = buildFullPipeline()
+	if (!pipeline) return
+
+	running.value = true
+
+	try {
+		const response = await api.aggregations.run(props.connectionId, props.database, props.collection, pipeline, {
+			page: pagination.value.page,
+			pageSize: pagination.value.pageSize,
+			skipCount: true
+		})
+
+		finalResults.value = response.results
+	} catch (err) {
+		dialog.error(t('pipelineError') + ': ' + err.message)
+	} finally {
+		running.value = false
+	}
+}
+
 function changePage(page) {
 	pagination.value.page = page
-	runFullPipeline()
+	fetchPageResults()
 }
 
 function formatCellValue(value) {
@@ -1906,8 +2065,12 @@ function switchToStagesMode() {
 	syncTextToStages()
 	editorMode.value = 'stages'
 
+	// Keep existing previews - only run if no previews exist and autoPreview is on
 	if (autoPreview.value && stages.value.length > 0) {
-		updateAllPreviews()
+		const hasAnyPreview = stages.value.some(s => s.previewDocs?.length > 0)
+		if (!hasAnyPreview) {
+			updateAllPreviews()
+		}
 	}
 }
 
@@ -1918,8 +2081,12 @@ function switchToTextMode() {
 	syncStagesToText()
 	editorMode.value = 'text'
 
-	// Run preview in text mode
-	runTextModePreview()
+	// Use last enabled stage's preview if available (same output)
+	const lastEnabledStage = [...stages.value].reverse().find(s => s.enabled && s.previewDocs?.length > 0)
+	if (lastEnabledStage) {
+		textModePreviewDocs.value = lastEnabledStage.previewDocs
+	}
+	// Don't auto-run preview - user must click Preview button
 }
 
 // Bidirectional sync functions
@@ -1956,14 +2123,26 @@ function syncTextToStages() {
 			return
 		}
 
-		stages.value = pipeline.map(stageObj => {
+		// Store existing stages to preserve previews
+		const existingStages = stages.value
+
+		stages.value = pipeline.map((stageObj, index) => {
 			const operator = Object.keys(stageObj)[0]
 			const value = stageObj[operator]
+			const newCode = typeof value === 'string' ? `"${value}"` : JSON.stringify(value, null, 2)
 
+			// Check if same operator and code exists at the same index
+			const existingStage = existingStages[index]
+			if (existingStage && existingStage.operator === operator && existingStage.code === newCode) {
+				// Keep existing stage (including preview data)
+				return existingStage
+			}
+
+			// Create new stage
 			return {
 				id: generateStageId(),
 				operator: operator,
-				code: typeof value === 'string' ? `"${value}"` : JSON.stringify(value, null, 2),
+				code: newCode,
 				enabled: true,
 				collapsed: false,
 				previewDocs: [],
@@ -1989,9 +2168,7 @@ function onTextModeChange() {
 	}
 	textModeDebounceTimer = setTimeout(() => {
 		validateTextMode()
-		if (!textModeError.value && autoPreview.value) {
-			runTextModePreview()
-		}
+		// Preview is manual - user must click the preview button
 	}, 500)
 }
 
@@ -2055,9 +2232,62 @@ async function runTextModePreview() {
 
 		const pipeline = Function('"use strict"; return (' + cleanCode + ')')()
 
-		const response = await api.aggregations.run(props.connectionId, props.database, props.collection, pipeline, {page: 1, pageSize: 10})
+		// Create/update stages (to preserve previews)
+		const existingStages = stages.value
+		stages.value = pipeline.map((stageObj, index) => {
+			const operator = Object.keys(stageObj)[0]
+			const value = stageObj[operator]
+			const newCode = typeof value === 'string' ? `"${value}"` : JSON.stringify(value, null, 2)
 
-		textModePreviewDocs.value = response.results || []
+			const existingStage = existingStages[index]
+			if (existingStage && existingStage.operator === operator && existingStage.code === newCode) {
+				return {...existingStage, previewLoading: true, previewError: null}
+			}
+
+			return {
+				id: generateStageId(),
+				operator: operator,
+				code: newCode,
+				enabled: true,
+				collapsed: false,
+				previewDocs: [],
+				previewCount: null,
+				previewLoading: true,
+				previewError: null,
+				error: null
+			}
+		})
+
+		// Run preview for each stage sequentially
+		for (let i = 0; i < stages.value.length; i++) {
+			const stagePipeline = stages.value
+				.slice(0, i + 1)
+				.filter(s => s.enabled && s.operator)
+				.map(s => parseStageCode(s.operator, s.code))
+				.filter(s => s !== null)
+
+			try {
+				const response = await api.aggregations.run(
+					props.connectionId,
+					props.database,
+					props.collection,
+					stagePipeline,
+					{page: 1, pageSize: 10, skipCount: true}
+				)
+				stages.value[i].previewDocs = response.results || []
+				stages.value[i].previewCount = response.results?.length || 0
+			} catch (err) {
+				stages.value[i].previewError = err.message
+				stages.value[i].previewDocs = []
+			} finally {
+				stages.value[i].previewLoading = false
+			}
+		}
+
+		// Show last stage's result in TEXT preview area
+		const lastStage = stages.value[stages.value.length - 1]
+		textModePreviewDocs.value = lastStage?.previewDocs || []
+
 	} catch (err) {
 		textModeError.value = err.message
 		textModePreviewDocs.value = []
@@ -2205,6 +2435,20 @@ onUnmounted(() => {
 	color: #aaa;
 }
 
+.counting-indicator {
+	color: #0066cc;
+	animation: pulse-count 1.5s infinite;
+}
+
+@keyframes pulse-count {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.5; }
+}
+
+.dark .counting-indicator {
+	color: #4da6ff;
+}
+
 .edit-icon {
 	font-size: 12px;
 }
@@ -2279,6 +2523,46 @@ onUnmounted(() => {
 	border-radius: 4px;
 	background: #fafafa;
 	overflow: hidden;
+}
+
+/* Pipeline Running State */
+.pipeline-running-container {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	min-height: 300px;
+	padding: 40px;
+}
+
+.pipeline-running-message {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	gap: 15px;
+}
+
+.pipeline-running-message h3 {
+	margin: 0;
+	font-size: 18px;
+	font-weight: 600;
+	color: #333;
+}
+
+.pipeline-running-message p {
+	margin: 0;
+	font-size: 14px;
+	color: #666;
+	max-width: 400px;
+}
+
+.running-spinner {
+	width: 50px;
+	height: 50px;
+	border: 4px solid #e0e0e0;
+	border-top-color: #0066cc;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
 }
 
 /* Add Stage Buttons */
@@ -2441,6 +2725,24 @@ onUnmounted(() => {
 	transform: translateX(16px);
 }
 
+.stage-warning-icon {
+	font-size: 16px;
+	margin-left: 8px;
+	cursor: help;
+	animation: pulse-warning 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+	0%, 100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.6;
+		transform: scale(1.1);
+	}
+}
+
 .stage-actions {
 	display: flex;
 	gap: 5px;
@@ -2578,6 +2880,26 @@ onUnmounted(() => {
 	border-top: 1px solid #fcc;
 }
 
+.stage-perf-warning {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 10px 12px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: #856404;
+	background: #fff3cd;
+	border: 1px solid #ffc107;
+	border-radius: 4px;
+	margin-top: 8px;
+}
+
+.stage-perf-warning svg {
+	flex-shrink: 0;
+	margin-top: 1px;
+	color: #ffc107;
+}
+
 /* Stage Preview */
 .stage-preview {
 	flex: 2;
@@ -2608,6 +2930,39 @@ onUnmounted(() => {
 .preview-count {
 	color: #888;
 	margin-left: 5px;
+}
+
+.btn-preview {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 4px 10px;
+	font-size: 12px;
+	background: #0e639c;
+	color: #fff;
+	border: none;
+	border-radius: 3px;
+	cursor: pointer;
+	margin-left: auto;
+}
+
+.btn-preview:hover:not(:disabled) {
+	background: #1177bb;
+}
+
+.btn-preview:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.btn-loading-sm {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	border-radius: 50%;
+	border-top-color: #fff;
+	animation: spin 0.8s linear infinite;
 }
 
 .preview-content {
@@ -2791,7 +3146,7 @@ onUnmounted(() => {
 }
 
 .results-content {
-	max-height: 500px;
+	max-height: 75vh;
 	overflow: auto;
 }
 
@@ -3364,6 +3719,24 @@ onUnmounted(() => {
 	padding: 10px 15px;
 	background: #f0f0f0;
 	border-bottom: 1px solid #ddd;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.focus-preview-btn {
+	margin-left: auto;
+	padding: 4px 12px;
+	font-size: 11px;
+}
+
+.focus-preview-btn .spinner-sm {
+	width: 12px;
+	height: 12px;
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	border-top-color: #fff;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
 }
 
 .focus-panel-header .panel-title {
@@ -3706,19 +4079,31 @@ onUnmounted(() => {
 
 .text-mode-preview-header {
 	display: flex;
-	justify-content: space-between;
 	align-items: center;
+	gap: 10px;
 	padding: 10px 15px;
 	background: #333;
 	color: #ccc;
 	font-size: 12px;
 }
 
+.text-mode-preview-header .preview-title {
+	flex-shrink: 0;
+}
+
+.text-mode-preview-header .preview-count {
+	color: #888;
+}
+
+.text-mode-preview-header .btn-preview {
+	margin-left: auto;
+}
+
 .text-mode-preview-content {
 	flex: 1;
 	padding: 15px;
 	overflow: auto;
-	max-height: 400px;
+	max-height: 445px;
 }
 
 .text-mode-preview-content.empty {
@@ -3726,6 +4111,34 @@ onUnmounted(() => {
 	align-items: center;
 	justify-content: center;
 	color: #888;
+}
+
+.preview-hint {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 16px;
+	background: #e8f4fd;
+	border: 1px solid #b8daff;
+	border-radius: 6px;
+	color: #004085;
+	font-size: 13px;
+}
+
+.preview-hint svg {
+	flex-shrink: 0;
+	color: #0066cc;
+}
+
+/* Dark mode preview hint */
+.dark .preview-hint {
+	background: #1e3a5f;
+	border-color: #2d5a8b;
+	color: #8bbde8;
+}
+
+.dark .preview-hint svg {
+	color: #5c9fd6;
 }
 
 .preview-docs-vertical {
@@ -3908,6 +4321,29 @@ onUnmounted(() => {
 	background: #3d3a1a;
 	color: #f0c674;
 	border-color: #6d5e1a;
+}
+
+.dark .stage-perf-warning {
+	background: #3d3000;
+	border-color: #ffc107;
+	color: #ffd54f;
+}
+
+.dark .stage-perf-warning svg {
+	color: #ffc107;
+}
+
+.dark .pipeline-running-message h3 {
+	color: #ccc;
+}
+
+.dark .pipeline-running-message p {
+	color: #888;
+}
+
+.dark .running-spinner {
+	border-color: #3c3c3c;
+	border-top-color: #0066cc;
 }
 
 .dark .results-section {

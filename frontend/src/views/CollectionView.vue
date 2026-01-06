@@ -259,7 +259,7 @@
 		</div>
 
 		<!-- Insert Modal -->
-		<div v-if="showInsertModal" class="modal-overlay" >
+		<div v-if="showInsertModal" class="modal-overlay" @keydown.esc="showInsertModal = false" tabindex="0" ref="insertModalRef">
 			<div class="mongomanager-modal" style="width: 750px">
 				<div class="modal-title">{{ $t('insertDocumentInto') }} {{ collection }}</div>
 				<form @submit.prevent="insertDoc">
@@ -276,7 +276,7 @@
 		</div>
 
 		<!-- Edit/Update Modal -->
-		<div v-if="showEditModal" class="modal-overlay" >
+		<div v-if="showEditModal" class="modal-overlay" @keydown.esc="showEditModal = false" tabindex="0" ref="editModalRef">
 			<div class="mongomanager-modal" style="width: 750px">
 				<div class="modal-title">{{ $t('updateDocument') }}</div>
 				<form @submit.prevent="updateDoc">
@@ -293,7 +293,7 @@
 		</div>
 
 		<!-- Multi Update Modal (Filter-based) -->
-		<div v-if="showMultiUpdateModal" class="modal-overlay" >
+		<div v-if="showMultiUpdateModal" class="modal-overlay" @keydown.esc="showMultiUpdateModal = false" tabindex="0" ref="multiUpdateModalRef">
 			<div class="mongomanager-modal" style="width: 700px">
 				<div class="modal-title">{{ $t('updateAllMatchingDocs') }} ({{ totalDocs }})</div>
 				<form @submit.prevent="multiUpdateByFilter">
@@ -313,7 +313,7 @@
 		</div>
 
 		<!-- Multi Delete Modal (Filter-based) -->
-		<div v-if="showMultiDeleteModal" class="modal-overlay" >
+		<div v-if="showMultiDeleteModal" class="modal-overlay" @keydown.esc="showMultiDeleteModal = false" tabindex="0" ref="multiDeleteModalRef">
 			<div class="mongomanager-modal" style="width: 500px">
 				<div class="modal-title">{{ $t('deleteAllMatchingDocs') }}</div>
 				<div style="padding: 15px">
@@ -342,7 +342,7 @@
 		</div>
 
 		<!-- Update Selected Documents Modal -->
-		<div v-if="showSelectedUpdateModal" class="modal-overlay" >
+		<div v-if="showSelectedUpdateModal" class="modal-overlay" @keydown.esc="showSelectedUpdateModal = false" tabindex="0" ref="selectedUpdateModalRef">
 			<div class="mongomanager-modal" style="width: 700px">
 				<div class="modal-title">{{ $t('updateSelectedDocs') }} ({{ selectedDocs.length }})</div>
 				<form @submit.prevent="executeSelectedUpdate">
@@ -359,7 +359,7 @@
 		</div>
 
 		<!-- New Field Modal -->
-		<div v-if="showNewFieldModal" class="modal-overlay" >
+		<div v-if="showNewFieldModal" class="modal-overlay" @keydown.esc="showNewFieldModal = false" tabindex="0" ref="newFieldModalRef">
 			<div class="mongomanager-modal modal-form" style="width: 420px">
 				<div class="modal-title">{{ $t('addNewFieldToAll') }}</div>
 				<form @submit.prevent="addNewField">
@@ -393,7 +393,7 @@
 		</div>
 
 		<!-- Rename Modal -->
-		<div v-if="showRenameModal" class="modal-overlay" >
+		<div v-if="showRenameModal" class="modal-overlay" @keydown.esc="showRenameModal = false" tabindex="0" ref="renameModalRef">
 			<div class="mongomanager-modal modal-form" style="width: 400px">
 				<div class="modal-title">{{ $t('renameCollection') }}</div>
 				<form @submit.prevent="renameCollection">
@@ -416,7 +416,7 @@
 		</div>
 
 		<!-- Export Modal -->
-		<div v-if="showExportModal" class="modal-overlay" >
+		<div v-if="showExportModal" class="modal-overlay" @keydown.esc="showExportModal = false" tabindex="0" ref="exportModalRef">
 			<div class="mongomanager-modal" style="width: 500px">
 				<div class="modal-title">{{ $t('exportCollection') }}: {{ collection }}</div>
 				<div style="padding: 15px">
@@ -446,7 +446,7 @@
 		</div>
 
 		<!-- Import Modal -->
-		<div v-if="showImportModal" class="modal-overlay" >
+		<div v-if="showImportModal" class="modal-overlay" @keydown.esc="showImportModal = false" tabindex="0" ref="importModalRef">
 			<div class="mongomanager-modal" style="width: 550px">
 				<div class="modal-title">{{ $t('importCollection') }}: {{ collection }}</div>
 				<div style="padding: 15px">
@@ -491,7 +491,7 @@
 		</div>
 
 		<!-- Properties Modal -->
-		<div v-if="showPropertiesModal" class="modal-overlay" >
+		<div v-if="showPropertiesModal" class="modal-overlay" @keydown.esc="showPropertiesModal = false" tabindex="0" ref="propertiesModalRef">
 			<div class="mongomanager-modal" style="width: 500px">
 				<div class="modal-title">{{ $t('properties') }}: {{ collection }}</div>
 				<div style="padding: 15px">
@@ -533,7 +533,7 @@
 		</div>
 
 		<!-- Transfer Modal -->
-		<div v-if="showTransferModal" class="modal-overlay" >
+		<div v-if="showTransferModal" class="modal-overlay" @keydown.esc="showTransferModal = false" tabindex="0" ref="transferModalRef">
 			<div class="mongomanager-modal modal-form" style="width: 420px">
 				<div class="modal-title">{{ $t('transfer') }}: {{ collection }}</div>
 				<form @submit.prevent="transferCollection">
@@ -565,7 +565,7 @@
 		</div>
 
 		<!-- Create Index Modal -->
-		<div v-if="showCreateIndexModal" class="modal-overlay" >
+		<div v-if="showCreateIndexModal" class="modal-overlay" @keydown.esc="showCreateIndexModal = false" tabindex="0" ref="createIndexModalRef">
 			<div class="mongomanager-modal modal-form" style="width: 500px">
 				<div class="modal-title">{{ $t('createIndex') }}: {{ collection }}</div>
 				<form @submit.prevent="createIndex">
@@ -651,7 +651,7 @@
 		</div>
 
 		<!-- History Modal -->
-		<div v-if="showHistory" class="modal-overlay" >
+		<div v-if="showHistory" class="modal-overlay" @keydown.esc="showHistory = false" tabindex="0" ref="historyModalRef">
 			<div class="mongomanager-modal" style="width: 600px">
 				<div class="modal-title">{{ $t('queryHistory') }}</div>
 				<div style="padding: 15px; max-height: 400px; overflow-y: auto">
@@ -669,7 +669,7 @@
 		</div>
 
 		<!-- Explain Modal -->
-		<div v-if="showExplainModal" class="modal-overlay" >
+		<div v-if="showExplainModal" class="modal-overlay" @keydown.esc="showExplainModal = false" tabindex="0" ref="explainModalRef">
 			<div class="mongomanager-modal" style="width: 700px">
 				<div class="modal-title">{{ $t('queryExplain') }}</div>
 				<div style="padding: 15px; max-height: 500px; overflow-y: auto">
@@ -684,7 +684,7 @@
 </template>
 
 <script setup>
-import {ref, computed, onMounted, watch} from 'vue'
+import {ref, computed, onMounted, watch, nextTick} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {useAppStore} from '../stores/app.js'
 import {api} from '../api/index.js'
@@ -762,6 +762,43 @@ const exporting = ref(false)
 const showExportModal = ref(false)
 const restoreFileInput = ref(null)
 const importFileInput = ref(null)
+
+// Modal refs for ESC key handling
+const insertModalRef = ref(null)
+const editModalRef = ref(null)
+const multiUpdateModalRef = ref(null)
+const selectedUpdateModalRef = ref(null)
+const multiDeleteModalRef = ref(null)
+const newFieldModalRef = ref(null)
+const renameModalRef = ref(null)
+const importModalRef = ref(null)
+const propertiesModalRef = ref(null)
+const transferModalRef = ref(null)
+const createIndexModalRef = ref(null)
+const historyModalRef = ref(null)
+const explainModalRef = ref(null)
+const exportModalRef = ref(null)
+
+// Focus modal when opened for ESC key handling
+function focusModal(modalRef) {
+	nextTick(() => {
+		modalRef.value?.focus()
+	})
+}
+watch(showInsertModal, v => v && focusModal(insertModalRef))
+watch(showEditModal, v => v && focusModal(editModalRef))
+watch(showMultiUpdateModal, v => v && focusModal(multiUpdateModalRef))
+watch(showSelectedUpdateModal, v => v && focusModal(selectedUpdateModalRef))
+watch(showMultiDeleteModal, v => v && focusModal(multiDeleteModalRef))
+watch(showNewFieldModal, v => v && focusModal(newFieldModalRef))
+watch(showRenameModal, v => v && focusModal(renameModalRef))
+watch(showImportModal, v => v && focusModal(importModalRef))
+watch(showPropertiesModal, v => v && focusModal(propertiesModalRef))
+watch(showTransferModal, v => v && focusModal(transferModalRef))
+watch(showCreateIndexModal, v => v && focusModal(createIndexModalRef))
+watch(showHistory, v => v && focusModal(historyModalRef))
+watch(showExplainModal, v => v && focusModal(explainModalRef))
+watch(showExportModal, v => v && focusModal(exportModalRef))
 
 // Transfer
 const transferTargetDb = ref('')

@@ -43,14 +43,20 @@
 					<button
 						class="btn btn-danger btn-sm"
 						@click="confirmDropIndex(index)"
-						:disabled="index.name === '_id_'"
+						:disabled="index.name === '_id_' || deletingIndex !== null"
 						:title="index.name === '_id_' ? 'Cannot drop _id index' : 'Drop index'"
 					>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<polyline points="3,6 5,6 21,6" />
-							<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-						</svg>
-						Drop
+						<template v-if="deletingIndex === index.name">
+							<span class="spinner-sm"></span>
+							Deleting...
+						</template>
+						<template v-else>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<polyline points="3,6 5,6 21,6" />
+								<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+							</svg>
+							Drop
+						</template>
 					</button>
 				</div>
 				<div class="index-keys">
@@ -61,7 +67,7 @@
 		</div>
 
 		<!-- Create Index Modal -->
-		<div v-if="showCreateModal" class="modal-overlay" >
+		<div v-if="showCreateModal" class="modal-overlay" @keydown.esc="closeModal" tabindex="0" ref="createModal">
 			<div class="modal-content">
 				<div class="modal-header">
 					<h3>Create Index</h3>
@@ -132,7 +138,7 @@
 </template>
 
 <script setup>
-import {ref, computed, onMounted} from 'vue'
+import {ref, computed, onMounted, watch, nextTick} from 'vue'
 import {useAppStore} from '../stores/app.js'
 import {useDialog} from '../composables/useDialog.js'
 import JsonEditor from './JsonEditor.vue'
@@ -144,9 +150,20 @@ const confirmDialog = ref(null)
 const keysEditor = ref(null)
 
 const showCreateModal = ref(false)
+const createModal = ref(null)
+
+watch(showCreateModal, newVal => {
+	if (newVal) {
+		nextTick(() => {
+			createModal.value?.focus()
+		})
+	}
+})
+
 const creating = ref(false)
 const createError = ref('')
 const hasTTL = ref(false)
+const deletingIndex = ref(null)
 
 const form = ref({
 	name: '',
@@ -232,7 +249,7 @@ async function createIdx() {
 }
 
 async function confirmDropIndex(index) {
-	if (index.name === '_id_') return
+	if (index.name === '_id_' || deletingIndex.value !== null) return
 
 	const confirmed = await dialog.confirm({
 		title: 'Drop Index',
@@ -243,10 +260,13 @@ async function confirmDropIndex(index) {
 	})
 
 	if (confirmed) {
+		deletingIndex.value = index.name
 		try {
 			await store.dropIndex(index.name)
 		} catch (error) {
 			dialog.error(`Failed to drop index: ${error.message}`)
+		} finally {
+			deletingIndex.value = null
 		}
 	}
 }

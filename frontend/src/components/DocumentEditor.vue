@@ -1,5 +1,5 @@
 <template>
-	<div v-if="visible" class="modal-overlay" >
+	<div v-if="visible" class="modal-overlay" @keydown.esc="close" tabindex="0" ref="modalOverlay">
 		<div class="modal-content document-editor">
 			<div class="editor-header">
 				<div class="header-title">
@@ -77,13 +77,22 @@
 </template>
 
 <script setup>
-import {ref, computed, nextTick} from 'vue'
+import {ref, computed, nextTick, watch} from 'vue'
 import {useAppStore} from '../stores/app.js'
 import JsonEditor from './JsonEditor.vue'
 
 const store = useAppStore()
 
 const visible = ref(false)
+const modalOverlay = ref(null)
+
+watch(visible, newVal => {
+	if (newVal) {
+		nextTick(() => {
+			modalOverlay.value?.focus()
+		})
+	}
+})
 const isNew = ref(false)
 const isEditing = ref(false)
 const documentJson = ref('')
