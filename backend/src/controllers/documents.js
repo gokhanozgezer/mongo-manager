@@ -108,12 +108,12 @@ export async function listDocuments(req, res, next) {
 		const projectionObj = parseQueryJson(projection)
 
 		const skip = (parseInt(page) - 1) * parseInt(pageSize)
-		const limit = parseInt(pageSize)
+		const limitNum = parseInt(pageSize)
 
-		// Get total count for pagination
-		const totalCount = await collection.countDocuments(filterObj)
+		// Check if filter is empty for count optimization
+		const isEmptyFilter = Object.keys(filterObj).length === 0
 
-		// Fetch documents
+		// Build cursor with all options
 		let cursor = collection.find(filterObj)
 
 		if (Object.keys(projectionObj).length > 0) {
@@ -124,7 +124,15 @@ export async function listDocuments(req, res, next) {
 			cursor = cursor.sort(sortObj)
 		}
 
-		const documents = await cursor.skip(skip).limit(limit).toArray()
+		// Parallel fetch: count + documents
+		// Use estimatedDocumentCount() for empty filter (O(1) metadata read)
+		// Use countDocuments() only when filter exists (requires collection scan)
+		const [totalCount, documents] = await Promise.all([
+			isEmptyFilter
+				? collection.estimatedDocumentCount()
+				: collection.countDocuments(filterObj),
+			cursor.skip(skip).limit(limitNum).toArray()
+		])
 
 		res.json({
 			documents: documents.map(documentToJson),
