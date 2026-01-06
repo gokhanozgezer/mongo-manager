@@ -63,7 +63,7 @@ const type = ref('info') // info, success, warning, error
 const confirmText = ref('OK')
 const cancelText = ref('Cancel')
 const showCancel = ref(true)
-const closeOnOverlay = ref(true)
+const closeOnOverlay = ref(false)
 
 // Prompt support
 const promptConfig = ref(null)
@@ -103,7 +103,7 @@ function confirm(options) {
 	confirmText.value = options.confirmText || 'Confirm'
 	cancelText.value = options.cancelText || 'Cancel'
 	showCancel.value = true
-	closeOnOverlay.value = options.closeOnOverlay !== false
+	closeOnOverlay.value = options.closeOnOverlay === true
 	promptConfig.value = null
 	promptValue.value = ''
 	promptError.value = ''
@@ -123,7 +123,7 @@ function prompt(options) {
 	confirmText.value = options.confirmText || 'Confirm'
 	cancelText.value = options.cancelText || 'Cancel'
 	showCancel.value = true
-	closeOnOverlay.value = options.closeOnOverlay !== false
+	closeOnOverlay.value = options.closeOnOverlay === true
 
 	promptConfig.value = {
 		label: options.inputLabel || '',
@@ -152,7 +152,7 @@ function alert(options) {
 	type.value = options.type || 'info'
 	confirmText.value = options.confirmText || 'OK'
 	showCancel.value = false
-	closeOnOverlay.value = true
+	closeOnOverlay.value = false
 	promptConfig.value = null
 	promptValue.value = ''
 	promptError.value = ''

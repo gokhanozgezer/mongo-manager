@@ -1,5 +1,5 @@
 <template>
-	<div class="modal-overlay" >
+	<div class="modal-overlay" @keydown.esc="$emit('close')" tabindex="0" ref="modalOverlay">
 		<div class="account-modal">
 			<div class="modal-header">
 				<h3>{{ $t('profile') || 'Profile' }}</h3>
@@ -74,7 +74,7 @@
 </template>
 
 <script setup>
-import {ref, nextTick} from 'vue'
+import {ref, nextTick, onMounted} from 'vue'
 import {useAppStore} from '../stores/app.js'
 import {useI18n} from 'vue-i18n'
 import {auth} from '../api/index.js'
@@ -83,6 +83,14 @@ const store = useAppStore()
 const {t} = useI18n()
 
 const emit = defineEmits(['close'])
+
+const modalOverlay = ref(null)
+
+onMounted(() => {
+	nextTick(() => {
+		modalOverlay.value?.focus()
+	})
+})
 
 // Username editing state
 const editingUsername = ref(false)

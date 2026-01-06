@@ -277,7 +277,8 @@ export const aggregations = {
 				pipeline,
 				page: options.page || 1,
 				pageSize: options.pageSize || 20,
-				explain: options.explain || false
+				explain: options.explain || false,
+				skipCount: options.skipCount || false
 			})
 		}),
 

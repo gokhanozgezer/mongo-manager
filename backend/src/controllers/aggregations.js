@@ -77,7 +77,7 @@ function documentToJson(doc) {
 export async function runAggregation(req, res, next) {
 	try {
 		const {connectionId, dbName, collectionName} = req.params
-		const {pipeline, page = 1, pageSize = 20, explain = false} = req.body
+		const {pipeline, page = 1, pageSize = 20, explain = false, skipCount = false} = req.body
 
 		if (!pipeline || !Array.isArray(pipeline)) {
 			return res.status(400).json({error: 'Pipeline must be an array of stages'})
@@ -88,9 +88,12 @@ export async function runAggregation(req, res, next) {
 		// Convert extended JSON in pipeline
 		const convertedPipeline = convertExtendedJson(pipeline)
 
+		// 5 minute timeout for aggregation queries
+		const aggregationOptions = {maxTimeMS: 300000}
+
 		// If explain mode, return the explain output
 		if (explain) {
-			const explained = await collection.aggregate(convertedPipeline).explain('executionStats')
+			const explained = await collection.aggregate(convertedPipeline, aggregationOptions).explain('executionStats')
 			return res.json({
 				explain: documentToJson(explained)
 			})
@@ -101,26 +104,46 @@ export async function runAggregation(req, res, next) {
 		const hasSkip = convertedPipeline.some(stage => '$skip' in stage)
 		const hasLimit = convertedPipeline.some(stage => '$limit' in stage)
 
-		// For paginated results, we need to run two aggregations:
-		// 1. One to get the count (with $count stage)
-		// 2. One to get the actual results
+		// Check if pipeline is empty (collection preview)
+		const isEmptyPipeline = convertedPipeline.length === 0
 
-		// Count pipeline (add $count at the end)
-		const countPipeline = [...convertedPipeline, {$count: 'total'}]
-		const countResult = await collection.aggregate(countPipeline).toArray()
-		const totalCount = countResult.length > 0 ? countResult[0].total : 0
-
-		// Results pipeline (add pagination if not present)
+		// Build results pipeline with pagination
 		const resultsPipeline = [...convertedPipeline]
+		const skip = (parseInt(page) - 1) * parseInt(pageSize)
+		const limitNum = parseInt(pageSize)
 
 		if (!hasSkip && !hasLimit) {
-			const skip = (parseInt(page) - 1) * parseInt(pageSize)
 			resultsPipeline.push({$skip: skip})
-			resultsPipeline.push({$limit: parseInt(pageSize)})
+			resultsPipeline.push({$limit: limitNum})
 		}
 
-		// Run the aggregation
-		const results = await collection.aggregate(resultsPipeline).toArray()
+		// For paginated results, we need count and results
+		// skipCount=true skips the expensive count query (useful for previews)
+		// If pipeline is empty, use estimatedDocumentCount (O(1) - instant)
+		// Otherwise use $count stage (slower but accurate for filtered results)
+		let totalCount = null
+		let results
+
+		if (skipCount) {
+			// Skip count for faster preview - just get results
+			results = await collection.aggregate(resultsPipeline, aggregationOptions).toArray()
+			totalCount = results.length < limitNum ? results.length : null
+		} else if (isEmptyPipeline) {
+			// Empty pipeline = collection preview - use fast count
+			;[totalCount, results] = await Promise.all([
+				collection.estimatedDocumentCount(),
+				collection.aggregate(resultsPipeline, aggregationOptions).toArray()
+			])
+		} else {
+			// Non-empty pipeline - run count and results in parallel
+			const countPipeline = [...convertedPipeline, {$count: 'total'}]
+			const [countResult, resultsData] = await Promise.all([
+				collection.aggregate(countPipeline, aggregationOptions).toArray(),
+				collection.aggregate(resultsPipeline, aggregationOptions).toArray()
+			])
+			totalCount = countResult.length > 0 ? countResult[0].total : 0
+			results = resultsData
+		}
 
 		res.json({
 			results: results.map(documentToJson),
@@ -128,7 +151,7 @@ export async function runAggregation(req, res, next) {
 				page: parseInt(page),
 				pageSize: parseInt(pageSize),
 				totalCount,
-				totalPages: Math.ceil(totalCount / parseInt(pageSize))
+				totalPages: totalCount !== null ? Math.ceil(totalCount / parseInt(pageSize)) : null
 			}
 		})
 	} catch (error) {

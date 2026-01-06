@@ -60,7 +60,7 @@
 		</ul>
 
 		<!-- Create Collection Modal -->
-		<div v-if="showCreateModal" class="modal-overlay" >
+		<div v-if="showCreateModal" class="modal-overlay" @keydown.esc="closeModal" tabindex="0" ref="createModal">
 			<div class="modal-content">
 				<div class="modal-header">
 					<h3>{{ t('createCollection') }}</h3>
@@ -112,7 +112,7 @@
 </template>
 
 <script setup>
-import {ref, computed} from 'vue'
+import {ref, computed, watch, nextTick} from 'vue'
 import {useAppStore} from '../stores/app.js'
 import {useRouter} from 'vue-router'
 import {useDialog} from '../composables/useDialog.js'
@@ -126,6 +126,16 @@ const router = useRouter()
 const confirmDialog = ref(null)
 
 const showCreateModal = ref(false)
+const createModal = ref(null)
+
+watch(showCreateModal, newVal => {
+	if (newVal) {
+		nextTick(() => {
+			createModal.value?.focus()
+		})
+	}
+})
+
 const newCollName = ref('')
 const isCapped = ref(false)
 const cappedSize = ref(1048576)
